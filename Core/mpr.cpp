@@ -16,6 +16,10 @@
 #include <vtkParametricSpline.h>
 #include <vtkParametricFunctionSource.h>
 #include <vtkSplineFilter.h>
+#include <vtkCellData.h>
+#include <vtkThreshold.h>
+#include <vtkGeometryFilter.h>
+#include <vtkUnstructuredGrid.h>
 
 #include "itkImageFileReader.h"
 #include "itkImage.h"
@@ -143,58 +147,89 @@ void MPR::Run()
 	transformFilter->Update();
 	m_centerline->DeepCopy(transformFilter->GetOutput());
 
-	// for robustness, generate a spline using centerline points
-	vtkSmartPointer<vtkParametricSpline> spline = vtkSmartPointer<vtkParametricSpline>::New();
-	spline->SetPoints(m_centerline->GetPoints());
-	vtkSmartPointer<vtkParametricFunctionSource> functionSource = vtkSmartPointer<vtkParametricFunctionSource>::New();
-	functionSource->SetParametricFunction(spline);
-	functionSource->Update();
+	vtkSmartPointer<vtkThreshold> thresholdFilter = vtkSmartPointer<vtkThreshold>::New();
+	thresholdFilter->SetInputData(m_centerline);
+	thresholdFilter->SetInputArrayToProcess(0, 0, 0, vtkDataObject::FIELD_ASSOCIATION_CELLS, "CenterlineIds");
 
-	vtkSmartPointer<vtkPolyData> splineSource = vtkSmartPointer<vtkPolyData>::New();
-	splineSource->DeepCopy(functionSource->GetOutput());
-	splineSource->GetPointData()->DeepCopy(m_centerline->GetPointData());
-
-	vtkSmartPointer<vtkSplineFilter> splineFilter = vtkSmartPointer<vtkSplineFilter>::New();
-	splineFilter->SetInputData(splineSource);
-	splineFilter->SetSubdivideToLength();
-	splineFilter->SetLength(m_splineSpacing);
-	splineFilter->Update();
-
-	std::cout << "Performing MPR..." << std::endl;
-
-	vtkSmartPointer<vtkvmtkCurvedMPRImageFilter2> curvedMPRImageFilter = vtkSmartPointer<vtkvmtkCurvedMPRImageFilter2>::New();
-	curvedMPRImageFilter->SetInputData(m_input);
-	curvedMPRImageFilter->SetParallelTransportNormalsArrayName("ParallelTransportNormals");
-	curvedMPRImageFilter->SetFrenetTangentArrayName("FrenetTangent");
-	curvedMPRImageFilter->SetInplaneOutputSpacing(m_inplaneSpacing, m_inplaneSpacing);
-	curvedMPRImageFilter->SetInplaneOutputSize(m_inplaneSize, m_inplaneSize);
-	curvedMPRImageFilter->SetReslicingBackgroundLevel(-2000);
-
-	// iterate through all centerlineids
-	curvedMPRImageFilter->SetCenterline(splineFilter->GetOutput());
-	curvedMPRImageFilter->Update();
- 
-	vtkSmartPointer<vtkImageData> mprImage = vtkSmartPointer<vtkImageData>::New();
-	mprImage->DeepCopy(curvedMPRImageFilter->GetOutput());
-	mprImage->SetSpacing(m_inplaneSpacing, m_inplaneSpacing,m_splineSpacing);
-
-	std::cout << "Write MPR file..." << std::endl;
-	std::cout << "Output path: " << m_outputPath << std::endl;
-	std::string output_extension = boost::filesystem::extension(m_outputPath);
-
-	if (output_extension == ".nii" || output_extension == ".NII"  || output_extension == ".gz" || output_extension == ".GZ")
+	// loop through centerlineIds
+	for (int i = 0; i < m_centerline->GetCellData()->GetArray("CenterlineIds")->GetRange()[1]+1; i++)
 	{
-		vtkSmartPointer<vtkNIFTIImageWriter> writer = vtkSmartPointer<vtkNIFTIImageWriter>::New();
-		writer->SetFileName(m_outputPath.c_str());
-		writer->SetInputData(mprImage);
-		writer->Update();
-	}
-	else if (output_extension == ".vti" || output_extension == ".VTI")
-	{
-		vtkSmartPointer<vtkXMLImageDataWriter> writer = vtkSmartPointer<vtkXMLImageDataWriter>::New();
-		writer->SetFileName(m_outputPath.c_str());
-		writer->SetInputData(mprImage);
-		writer->Update();
+		thresholdFilter->ThresholdBetween(i, i);
+		thresholdFilter->Update();
+
+		vtkSmartPointer<vtkGeometryFilter> geomFilter = vtkSmartPointer<vtkGeometryFilter>::New();
+		geomFilter->SetInputData(thresholdFilter->GetOutput());
+		geomFilter->Update();
+
+		// for robustness, generate a spline using centerline points
+		vtkSmartPointer<vtkParametricSpline> spline = vtkSmartPointer<vtkParametricSpline>::New();
+		spline->SetPoints(thresholdFilter->GetOutput()->GetPoints());
+		vtkSmartPointer<vtkParametricFunctionSource> functionSource = vtkSmartPointer<vtkParametricFunctionSource>::New();
+		functionSource->SetParametricFunction(spline);
+		functionSource->Update();
+
+		vtkSmartPointer<vtkPolyData> splineSource = vtkSmartPointer<vtkPolyData>::New();
+		splineSource->DeepCopy(functionSource->GetOutput());
+		splineSource->GetPointData()->DeepCopy(m_centerline->GetPointData());
+
+		vtkSmartPointer<vtkSplineFilter> splineFilter = vtkSmartPointer<vtkSplineFilter>::New();
+		splineFilter->SetInputData(splineSource);
+		splineFilter->SetSubdivideToLength();
+		splineFilter->SetLength(m_splineSpacing);
+		splineFilter->Update();
+
+		std::cout << "Performing MPR for branch " <<i <<"..." << std::endl;
+
+		vtkSmartPointer<vtkvmtkCurvedMPRImageFilter2> curvedMPRImageFilter = vtkSmartPointer<vtkvmtkCurvedMPRImageFilter2>::New();
+		curvedMPRImageFilter->SetInputData(m_input);
+		curvedMPRImageFilter->SetParallelTransportNormalsArrayName("ParallelTransportNormals");
+		curvedMPRImageFilter->SetFrenetTangentArrayName("FrenetTangent");
+		curvedMPRImageFilter->SetInplaneOutputSpacing(m_inplaneSpacing, m_inplaneSpacing);
+		curvedMPRImageFilter->SetInplaneOutputSize(m_inplaneSize, m_inplaneSize);
+		curvedMPRImageFilter->SetReslicingBackgroundLevel(-2000);
+
+		// iterate through all centerlineids
+		curvedMPRImageFilter->SetCenterline(splineFilter->GetOutput());
+		curvedMPRImageFilter->Update();
+
+		vtkSmartPointer<vtkImageData> mprImage = vtkSmartPointer<vtkImageData>::New();
+		mprImage->DeepCopy(curvedMPRImageFilter->GetOutput());
+		mprImage->SetSpacing(m_inplaneSpacing, m_inplaneSpacing, m_splineSpacing);
+
+		std::cout << "Write MPR file..." << std::endl;
+		boost::filesystem::path outputPath(m_outputPath);
+		std::string output_extension = boost::filesystem::extension(m_outputPath);
+		std::string output_dir = outputPath.parent_path().string();
+		std::string id_outputPath;
+
+		if (output_extension == ".gz" || output_extension == ".GZ")
+		{
+			std::string output_prefix = outputPath.stem().stem().string();
+			id_outputPath = output_dir + "/" + output_prefix + "_" + std::to_string(i) + ".nii.gz";
+
+		}
+		else
+		{
+			std::string output_prefix = outputPath.stem().string();
+			id_outputPath = output_dir + "/" + output_prefix + "_" + std::to_string(i) + output_extension;
+		}
+
+		std::cout << "Output path: " << id_outputPath << std::endl;
+
+		if (output_extension == ".nii" || output_extension == ".NII" || output_extension == ".gz" || output_extension == ".GZ")
+		{
+			vtkSmartPointer<vtkNIFTIImageWriter> writer = vtkSmartPointer<vtkNIFTIImageWriter>::New();
+			writer->SetFileName(id_outputPath.c_str());
+			writer->SetInputData(mprImage);
+			writer->Update();
+		}
+		else if (output_extension == ".vti" || output_extension == ".VTI")
+		{
+			vtkSmartPointer<vtkXMLImageDataWriter> writer = vtkSmartPointer<vtkXMLImageDataWriter>::New();
+			writer->SetFileName(id_outputPath.c_str());
+			writer->SetInputData(mprImage);
+			writer->Update();
+		}
 	}
 
 	//vtkSmartPointer<vtkXMLImageDataWriter> writer = vtkSmartPointer<vtkXMLImageDataWriter>::New();
