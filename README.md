@@ -32,7 +32,14 @@ Sample dataset can be found from `./Data`. Corresponding centerlines are include
 ```bash
 # reslice image
 $ .\Multiplanar-Reconstruction.exe -i <repo-root>\Data\image.nii.gz -c <repo-root>\Data\centerline.vtp -o <repo-root>\Data\mpr.nii.gz
+
+# reslice label
+$ .\Multiplanar-Reconstruction.exe -i <repo-root>\Data\label.nii.gz -c <repo-root>\Data\centerline.vtp -o <repo-root>\Data\mpr_label.nii.gz
 ```
+
+### MPR results
+![para-coronal view](./Docs/cor.png)
+![para-sagittal view](./Docs/sag.png)
 
 ## Compile from source
 
