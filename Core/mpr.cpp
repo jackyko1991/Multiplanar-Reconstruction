@@ -152,7 +152,7 @@ void MPR::Run()
 	thresholdFilter->SetInputArrayToProcess(0, 0, 0, vtkDataObject::FIELD_ASSOCIATION_CELLS, "CenterlineIds");
 
 	// loop through centerlineIds
-	for (int i = 0; i < m_centerline->GetCellData()->GetArray("CenterlineIds")->GetRange()[1]+1; i++)
+	for (int i = m_centerline->GetCellData()->GetArray("CenterlineIds")->GetRange()[0]; i < m_centerline->GetCellData()->GetArray("CenterlineIds")->GetRange()[1]+1; i++)
 	{
 		thresholdFilter->ThresholdBetween(i, i);
 		thresholdFilter->Update();
@@ -161,16 +161,19 @@ void MPR::Run()
 		geomFilter->SetInputData(thresholdFilter->GetOutput());
 		geomFilter->Update();
 
+		if (geomFilter->GetOutput()->GetNumberOfPoints() == 0)
+			continue;
+
 		// for robustness, generate a spline using centerline points
 		vtkSmartPointer<vtkParametricSpline> spline = vtkSmartPointer<vtkParametricSpline>::New();
-		spline->SetPoints(thresholdFilter->GetOutput()->GetPoints());
+		spline->SetPoints(geomFilter->GetOutput()->GetPoints());
 		vtkSmartPointer<vtkParametricFunctionSource> functionSource = vtkSmartPointer<vtkParametricFunctionSource>::New();
 		functionSource->SetParametricFunction(spline);
 		functionSource->Update();
 
 		vtkSmartPointer<vtkPolyData> splineSource = vtkSmartPointer<vtkPolyData>::New();
 		splineSource->DeepCopy(functionSource->GetOutput());
-		splineSource->GetPointData()->DeepCopy(m_centerline->GetPointData());
+		splineSource->GetPointData()->DeepCopy(geomFilter->GetOutput()->GetPointData());
 
 		vtkSmartPointer<vtkSplineFilter> splineFilter = vtkSmartPointer<vtkSplineFilter>::New();
 		splineFilter->SetInputData(splineSource);
@@ -178,7 +181,22 @@ void MPR::Run()
 		splineFilter->SetLength(m_splineSpacing);
 		splineFilter->Update();
 
-		std::cout << "Performing MPR for branch " <<i <<"..." << std::endl;
+		std::cout << "Performing MPR for branch " << i <<"..." << std::endl;
+
+		////save transformed centerline
+		//vtkSmartPointer<vtkXMLPolyDataWriter> writer1 = vtkSmartPointer<vtkXMLPolyDataWriter>::New();
+		//writer1->SetFileName("Z:/projects/Carotid-Stenosis/cxx/Multiplanar-Reconstruction/Data/centerline_tfm.vtp");
+		//writer1->SetInputData(splineFilter->GetOutput());
+		//writer1->Update();
+
+		//vtkSmartPointer<vtkXMLImageDataWriter> writer2 = vtkSmartPointer<vtkXMLImageDataWriter>::New();
+		//writer2->SetFileName("Z:/projects/Carotid-Stenosis/cxx/Multiplanar-Reconstruction/Data/image.vti");
+		//writer2->SetInputData(m_input);
+		//writer2->Update();
+
+		//std::cout << "inplane spacing: " << m_inplaneSpacing << std::endl;
+		//std::cout << "inplane size: " << m_inplaneSize << std::endl;
+		//std::cout << "spline spacing: " << m_splineSpacing << std::endl;
 
 		vtkSmartPointer<vtkvmtkCurvedMPRImageFilter2> curvedMPRImageFilter = vtkSmartPointer<vtkvmtkCurvedMPRImageFilter2>::New();
 		curvedMPRImageFilter->SetInputData(m_input);
@@ -190,7 +208,10 @@ void MPR::Run()
 
 		// iterate through all centerlineids
 		curvedMPRImageFilter->SetCenterline(splineFilter->GetOutput());
+		//curvedMPRImageFilter->SetCenterline(m_centerline);
 		curvedMPRImageFilter->Update();
+		//curvedMPRImageFilter->GetCenterline()->Print(std::cout);
+		//curvedMPRImageFilter->GetOutput()->Print(std::cout);
 
 		vtkSmartPointer<vtkImageData> mprImage = vtkSmartPointer<vtkImageData>::New();
 		mprImage->DeepCopy(curvedMPRImageFilter->GetOutput());

@@ -76,5 +76,8 @@ int main(int argc, char *argv[])
 	mpr.SetInputPath(vm["input"].as<std::string>());
 	mpr.SetCenterlinePath(vm["centerline"].as<std::string>());
 	mpr.SetOutputPath(vm["output"].as<std::string>());
+	mpr.SetInplaneSize(vm["imageSize"].as<int>());
+	mpr.SetInplaneSpacing(vm["imageSpacing"].as<double>());
+	mpr.SetSplineSpacing(vm["splineSpacing"].as<double>());
 	mpr.Run();
 }
