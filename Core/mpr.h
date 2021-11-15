@@ -17,12 +17,14 @@ public:
 	void SetInplaneSize(int);
 	void SetInplaneSpacing(double);
 	void SetSplineSpacing(double);
+	void SetReslicingBackgroundLevel(double);
 	void Run();
 
 private:
 	int m_inplaneSize = 120;
 	double m_inplaneSpacing = 0.25;
 	double m_splineSpacing = 0.25;
+	double m_reslicingBackgroundLevel = 0;
 
 	std::string m_inputPath;
 	std::string m_centerlinePath;

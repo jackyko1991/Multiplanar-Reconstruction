@@ -4,6 +4,9 @@
 
 #include <vtkvmtkITKArchetypeImageSeriesScalarReader.h>
 #include <vtkvmtkCurvedMPRImageFilter2.h>
+#include <vtkvmtkCenterlineAttributesFilter.h>
+#include <vtkvmtkCenterlineGeometry.h>
+#include <vtkvmtkCenterlineBranchExtractor.h>
 
 #include <observe_error.h>
 
@@ -64,6 +67,11 @@ void MPR::SetInplaneSpacing(double inplaneSpacing)
 void MPR::SetSplineSpacing(double splineSpacing)
 {
 	m_splineSpacing = splineSpacing;
+}
+
+void MPR::SetReslicingBackgroundLevel(double level)
+{
+	m_reslicingBackgroundLevel = level;
 }
 
 void MPR::Run()
@@ -181,6 +189,37 @@ void MPR::Run()
 		splineFilter->SetLength(m_splineSpacing);
 		splineFilter->Update();
 
+		// need to recompute data arrays
+		vtkSmartPointer<vtkvmtkCenterlineAttributesFilter> attributeFilter = vtkSmartPointer<vtkvmtkCenterlineAttributesFilter>::New();
+		attributeFilter->SetInputData(splineFilter->GetOutput());
+		attributeFilter->SetParallelTransportNormalsArrayName("ParallelTransportNormals");
+		attributeFilter->SetAbscissasArrayName("Abscissas");
+		attributeFilter->Update();
+
+		vtkSmartPointer<vtkvmtkCenterlineGeometry> geometryFilter = vtkSmartPointer<vtkvmtkCenterlineGeometry>::New();
+		geometryFilter->SetInputData(attributeFilter->GetOutput());
+		geometryFilter->SetFrenetBinormalArrayName("FrenetBinormal");
+		geometryFilter->SetFrenetNormalArrayName("FrenetNormal");
+		geometryFilter->SetFrenetTangentArrayName("FrenetTangent");
+		geometryFilter->SetLengthArrayName("Length");
+		geometryFilter->SetTorsionArrayName("Torsion");
+		geometryFilter->SetTortuosityArrayName("Tortuosity");
+		geometryFilter->SetCurvatureArrayName("Curvature");
+		geometryFilter->SetLineSmoothing(0);
+		geometryFilter->SetNumberOfSmoothingIterations(100);
+		geometryFilter->SetSmoothingFactor(0.1);
+		geometryFilter->SetGlobalWarningDisplay(1);
+		geometryFilter->Update();
+
+		vtkSmartPointer<vtkvmtkCenterlineBranchExtractor> branchExtractor = vtkSmartPointer<vtkvmtkCenterlineBranchExtractor>::New();
+		branchExtractor->SetInputData(geometryFilter->GetOutput());
+		branchExtractor->SetRadiusArrayName("Radius");
+		branchExtractor->SetCenterlineIdsArrayName("CenterlineIds");
+		branchExtractor->SetGroupIdsArrayName("GroupIds");
+		branchExtractor->SetBlankingArrayName("Blanking");
+		branchExtractor->SetTractIdsArrayName("TractIds");
+		branchExtractor->Update();
+
 		std::cout << "Performing MPR for branch " << i <<"..." << std::endl;
 
 		////save transformed centerline
@@ -204,10 +243,10 @@ void MPR::Run()
 		curvedMPRImageFilter->SetFrenetTangentArrayName("FrenetTangent");
 		curvedMPRImageFilter->SetInplaneOutputSpacing(m_inplaneSpacing, m_inplaneSpacing);
 		curvedMPRImageFilter->SetInplaneOutputSize(m_inplaneSize, m_inplaneSize);
-		curvedMPRImageFilter->SetReslicingBackgroundLevel(-2000);
+		curvedMPRImageFilter->SetReslicingBackgroundLevel(m_reslicingBackgroundLevel);
 
 		// iterate through all centerlineids
-		curvedMPRImageFilter->SetCenterline(splineFilter->GetOutput());
+		curvedMPRImageFilter->SetCenterline(branchExtractor->GetOutput());
 		//curvedMPRImageFilter->SetCenterline(m_centerline);
 		curvedMPRImageFilter->Update();
 		//curvedMPRImageFilter->GetCenterline()->Print(std::cout);

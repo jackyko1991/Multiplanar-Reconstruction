@@ -13,6 +13,7 @@ int main(int argc, char *argv[])
 	int imageSize;
 	double imageSpacing;
 	double splineSpacing;
+	double background;
 
 	desc.add_options()
 		("help,h", "Display this help")
@@ -22,6 +23,7 @@ int main(int argc, char *argv[])
 		("imageSize,x", po::value<int>(&imageSize)->default_value(120), "Inplane image size for MPR output (default = 120)")
 		("imageSpacing,r", po::value<double>(&imageSpacing)->default_value(0.25), "Inplane image spacing for MPR output (default = 0.25)")
 		("splineSpacing,s", po::value<double>(&splineSpacing)->default_value(0.25), "Subdivided centerline point spacing, equivalent to z direction resolution for MPR output (default = 0.25)")
+		("background,b", po::value<double>(&background)->default_value(0), "Reslicing background level (default = 0.0)")
 		;
 	po::variables_map vm;
 	po::store(po::parse_command_line(argc, argv, desc), vm);
@@ -79,5 +81,6 @@ int main(int argc, char *argv[])
 	mpr.SetInplaneSize(vm["imageSize"].as<int>());
 	mpr.SetInplaneSpacing(vm["imageSpacing"].as<double>());
 	mpr.SetSplineSpacing(vm["splineSpacing"].as<double>());
+	mpr.SetReslicingBackgroundLevel(vm["background"].as<double>());
 	mpr.Run();
 }
